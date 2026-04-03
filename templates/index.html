@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>xLoS / 동일LoS 분석 도구</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --text: #1a2b40;
+    --text-sub: #5a7a9a;
+    --accent: #007aff;
+    --accent-light: #5ac8fa;
+    --accent-glow: rgba(0, 122, 255, 0.18);
+    --success: #34c759;
+    --error: #ff3b30;
+    --warning: #ff9500;
+    --info: #007aff;
+    --radius: 24px;
+    --radius-sm: 16px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    background: #c8e2f8;
+    background-image:
+      radial-gradient(ellipse 120% 80% at 25% 15%, #a8d8ea 0%, transparent 55%),
+      radial-gradient(ellipse 100% 70% at 75% 10%, #f0d4e8 0%, transparent 50%),
+      radial-gradient(ellipse 90% 60% at 10% 70%, #daeaf8 0%, transparent 50%),
+      radial-gradient(ellipse 80% 60% at 85% 75%, #c4ddf0 0%, transparent 50%),
+      radial-gradient(ellipse 60% 50% at 50% 45%, #e8f2fb 0%, transparent 60%);
+    background-attachment: fixed;
+  }
+
+  /* animated floating blobs behind glass */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: .5;
+    z-index: 0;
+    pointer-events: none;
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  body::before {
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, #b6d8f7, #d8c8f0);
+    top: -8%; left: -5%;
+  }
+  body::after {
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, #f2d0e0, #c4e0f4);
+    bottom: 5%; right: -5%;
+    animation-delay: -8s;
+    animation-duration: 22s;
+  }
+  @keyframes drift {
+    0%   { transform: translate(0, 0) scale(1); }
+    50%  { transform: translate(30px, 20px) scale(1.05); }
+    100% { transform: translate(-20px, 30px) scale(0.97); }
+  }
+
+  /* ── Liquid Glass ─────────────────────────────── */
+  .glass {
+    position: relative;
+    background: rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(50px) saturate(1.8) brightness(1.12);
+    -webkit-backdrop-filter: blur(50px) saturate(1.8) brightness(1.12);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: var(--radius);
+    box-shadow:
+      0 8px 40px rgba(80, 140, 200, 0.10),
+      0 1.5px 4px rgba(0, 0, 0, 0.04),
+      inset 0 1.5px 0 rgba(255, 255, 255, 0.70),
+      inset 0 -0.5px 0 rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+  }
+  /* specular highlight strip across top edge */
+  .glass::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 10%; right: 10%; height: 1px;
+    background: linear-gradient(90deg,
+      transparent, rgba(255,255,255,0.9) 30%, rgba(255,255,255,0.95) 50%, rgba(255,255,255,0.9) 70%, transparent);
+    pointer-events: none;
+    z-index: 1;
+  }
+  /* subtle refraction glow at bottom */
+  .glass::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 15%; right: 15%; height: 1px;
+    background: linear-gradient(90deg,
+      transparent, rgba(255,255,255,0.3) 40%, rgba(255,255,255,0.35) 50%, rgba(255,255,255,0.3) 60%, transparent);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ── 레이아웃 z-index ────────────────────────── */
+  header, .container, footer { position: relative; z-index: 1; }
+
+  /* ── 헤더 ──────────────────────────────────── */
+  header {
+    text-align: left;
+    padding: 2.4rem 1rem 1.2rem;
+  }
+  .header-inner {
+    max-width: 780px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .header-inner img { height: 52px; flex-shrink: 0; }
+  header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0c3a68;
+  }
+  header p {
+    margin-top: .3rem;
+    font-size: .85rem;
+    color: var(--text-sub);
+  }
+
+  .container { max-width: 780px; margin: 0 auto; padding: 0 1rem 3rem; }
+
+  /* ── 카드 ──────────────────────────────────── */
+  .card { padding: 1.5rem 1.75rem; margin-bottom: .85rem; }
+  .card-title {
+    font-size: .92rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    color: var(--text);
+  }
+  .step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 26px;
+    background: linear-gradient(145deg, rgba(0,122,255,0.75), rgba(90,200,250,0.70));
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff;
+    border-radius: 9px;
+    font-size: .72rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    box-shadow:
+      0 2px 8px rgba(0, 122, 255, 0.20),
+      inset 0 1px 1px rgba(255,255,255,0.4);
+    border: 1px solid rgba(255,255,255,0.3);
+  }
+
+  /* ── 기준월 ─────────────────────────────────── */
+  .month-row { display: flex; align-items: center; gap: .6rem; }
+  .month-row span { font-size: .88rem; color: var(--text-sub); }
+  .sel {
+    padding: .5rem .85rem;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 12px;
+    font-size: .9rem;
+    font-family: inherit;
+    background: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    color: var(--text);
+    cursor: pointer;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s, background .2s;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23007aff'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right .7rem center;
+    padding-right: 2rem;
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.5), 0 1px 3px rgba(0,40,80,0.06);
+  }
+  .sel option { background: #fff; color: var(--text); }
+  .sel:focus { border-color: rgba(0,122,255,0.4); box-shadow: 0 0 0 3px var(--accent-glow), inset 0 1px 1px rgba(255,255,255,0.5); }
+
+  /* ── 파일 업로드 ────────────────────────────── */
+  .file-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .55rem; }
+
+  .file-slot {
+    border: 1.5px dashed rgba(0, 80, 160, 0.13);
+    border-radius: var(--radius-sm);
+    padding: .8rem .5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all .3s cubic-bezier(.4,0,.2,1);
+    background: rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.4);
+  }
+  .file-slot:hover {
+    border-color: rgba(0, 122, 255, 0.25);
+    background: rgba(255, 255, 255, 0.35);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 80, 160, 0.08), inset 0 1px 1px rgba(255,255,255,0.5);
+  }
+  .file-slot.has-file {
+    border-color: rgba(52, 199, 89, 0.4);
+    border-style: solid;
+    background: rgba(52, 199, 89, 0.08);
+    box-shadow: 0 0 0 1px rgba(52,199,89,0.1), inset 0 1px 1px rgba(255,255,255,0.4);
+  }
+  .file-slot label { cursor: pointer; display: block; }
+  .file-slot input[type="file"] { display: none; }
+  .file-slot .slot-icon {
+    font-size: 1.5rem;
+    margin-bottom: .2rem;
+    line-height: 1;
+    transition: transform .2s;
+    color: var(--accent);
+  }
+  .file-slot:hover .slot-icon { transform: scale(1.1); }
+  .file-slot .slot-label {
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .file-slot .slot-hint {
+    font-size: .65rem;
+    color: var(--text-sub);
+    margin-top: .15rem;
+  }
+  .file-slot .slot-name {
+    font-size: .63rem;
+    color: var(--success);
+    margin-top: .25rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  /* ── 버튼 ──────────────────────────────────── */
+  .btn-run {
+    width: 100%;
+    padding: .85rem;
+    background: linear-gradient(145deg, rgba(0,122,255,0.8), rgba(90,200,250,0.75));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: var(--radius-sm);
+    font-size: .95rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform .2s cubic-bezier(.4,0,.2,1), box-shadow .2s, opacity .15s;
+    box-shadow:
+      0 4px 20px rgba(0, 122, 255, 0.20),
+      inset 0 1px 1px rgba(255,255,255,0.35);
+  }
+  .btn-run:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0,122,255,.28), inset 0 1px 1px rgba(255,255,255,0.4);
+  }
+  .btn-run:active { transform: translateY(0); }
+  .btn-run:disabled { opacity: .35; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* ── 로딩 ──────────────────────────────────── */
+  .spinner {
+    display: none;
+    text-align: center;
+    padding: 1.2rem;
+    color: var(--text-sub);
+    font-size: .88rem;
+  }
+  .spinner.show { display: flex; align-items: center; justify-content: center; gap: .6rem; }
+  .spinner-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: bounce .6s infinite alternate;
+  }
+  .spinner-dot:nth-child(2) { animation-delay: .15s; opacity: .7; }
+  .spinner-dot:nth-child(3) { animation-delay: .3s; opacity: .5; }
+  @keyframes bounce { to { transform: translateY(-6px); opacity: 1; } }
+
+  /* ── 결과 ──────────────────────────────────── */
+  #result { display: none; margin-top: .25rem; }
+  #result.show { display: block; }
+  .result-error {
+    background: rgba(255, 59, 48, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 59, 48, 0.20);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    color: var(--error);
+    font-size: .88rem;
+    white-space: pre-wrap;
+  }
+
+  /* ── 요약 테이블 ─────────────────────────────── */
+  .summary-card {
+    margin-bottom: .8rem;
+    padding: 1.25rem 1.4rem;
+  }
+  .summary-title {
+    font-size: .88rem;
+    font-weight: 700;
+    margin-bottom: .8rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    color: var(--text);
+  }
+  .summary-title .tag {
+    display: inline-block;
+    padding: .18rem .6rem;
+    border-radius: 8px;
+    font-size: .68rem;
+    font-weight: 600;
+    color: #fff;
+  }
+  .tag-xlos { background: linear-gradient(135deg, var(--accent), var(--accent-light)); }
+  .tag-same { background: linear-gradient(135deg, #5ac8fa, #70d7ff); }
+
+  .summary-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -.5rem;
+    padding: 0 .5rem;
+  }
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .75rem;
+    white-space: nowrap;
+    min-width: 480px;
+  }
+  .summary-table th, .summary-table td {
+    padding: .45rem .55rem;
+    text-align: right;
+    border-bottom: 1px solid rgba(0, 60, 120, 0.05);
+  }
+  .summary-table th {
+    font-weight: 600;
+    color: var(--text-sub);
+    font-size: .7rem;
+    letter-spacing: -.01em;
+  }
+  .summary-table th.period-header {
+    text-align: center;
+    background: rgba(0, 122, 255, 0.06);
+    border-radius: 8px 8px 0 0;
+    color: #0c5bb5;
+    font-size: .72rem;
+    font-weight: 700;
+    padding: .45rem .4rem .25rem;
+  }
+  .summary-table th.period-header-same {
+    background: rgba(90, 200, 250, 0.08);
+    color: #0c5bb5;
+  }
+  .summary-table .los-cell {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text);
+    position: sticky;
+    left: 0;
+    background: rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .summary-table .total-row td {
+    font-weight: 700;
+    border-top: 1.5px solid rgba(0, 60, 120, 0.10);
+    color: var(--text);
+  }
+  .summary-table .num-cell { font-variant-numeric: tabular-nums; }
+  .summary-table .zero { color: rgba(0, 60, 120, 0.18); }
+
+  /* ── 다운로드 바 ──────────────────────────────── */
+  .download-bar {
+    text-align: center;
+    padding: 1.2rem;
+    margin-bottom: .8rem;
+  }
+  .download-bar p {
+    color: var(--success);
+    font-weight: 600;
+    font-size: .9rem;
+    margin-bottom: .7rem;
+  }
+  .btn-download {
+    display: inline-block;
+    padding: .65rem 2.2rem;
+    background: linear-gradient(145deg, rgba(52,199,89,0.8), rgba(48,209,88,0.75));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: .88rem;
+    transition: transform .2s cubic-bezier(.4,0,.2,1), box-shadow .2s;
+    box-shadow: 0 4px 16px rgba(52, 199, 89, 0.18), inset 0 1px 1px rgba(255,255,255,0.3);
+  }
+  .btn-download:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(52,199,89,.25), inset 0 1px 1px rgba(255,255,255,0.35);
+  }
+
+  /* ── 템플릿 관리 (접힘) ─────────────────────── */
+  .tmpl-section {
+    margin-top: .25rem;
+    padding: 1.1rem 1.5rem;
+    font-size: .82rem;
+  }
+  .tmpl-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tmpl-header span { color: var(--text-sub); }
+  .tmpl-status { font-weight: 600; color: var(--success); font-size: .78rem; }
+  .tmpl-body {
+    display: none;
+    margin-top: .8rem;
+    padding-top: .8rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  .tmpl-body.open { display: block; }
+  .tmpl-body p { color: var(--text-sub); font-size: .78rem; margin-bottom: .6rem; line-height: 1.5; }
+  .tmpl-row { display: flex; gap: .5rem; align-items: center; }
+  .tmpl-row input[type="file"] { font-size: .78rem; font-family: inherit; color: var(--text-sub); }
+  .btn-tmpl {
+    padding: .4rem .9rem;
+    background: rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 10px;
+    font-size: .78rem;
+    font-family: inherit;
+    color: var(--accent);
+    cursor: pointer;
+    transition: background .2s, box-shadow .2s;
+    white-space: nowrap;
+    font-weight: 500;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4);
+  }
+  .btn-tmpl:hover { background: rgba(255, 255, 255, 0.4); box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 8px rgba(0,80,160,0.06); }
+
+  footer {
+    text-align: center;
+    padding: 1rem 0 2rem;
+    color: rgba(0, 60, 120, 0.3);
+    font-size: .75rem;
+  }
+
+  /* ── 검증 체크리스트 ─────────────────────────── */
+  .validation-card { margin-bottom: .8rem; padding: 1.25rem 1.4rem; }
+  .validation-title {
+    font-size: .88rem;
+    font-weight: 700;
+    margin-bottom: .8rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    color: var(--text);
+  }
+  .validation-list { list-style: none; display: flex; flex-direction: column; gap: .45rem; }
+  .validation-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    padding: .6rem .75rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    transition: background .2s, box-shadow .2s;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
+  }
+  .validation-item:hover { background: rgba(255, 255, 255, 0.35); box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 8px rgba(0,80,160,0.04); }
+  .v-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 54px;
+    padding: .2rem .55rem;
+    border-radius: 8px;
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .v-badge-pass  { background: rgba(52,199,89,.15); color: #1a8d3e; border: 1px solid rgba(52,199,89,.25); backdrop-filter: blur(8px); }
+  .v-badge-fail  { background: rgba(255,59,48,.12);  color: #d32f2f; border: 1px solid rgba(255,59,48,.22); backdrop-filter: blur(8px); }
+  .v-badge-warn  { background: rgba(255,149,0,.12);  color: #c77700; border: 1px solid rgba(255,149,0,.22); backdrop-filter: blur(8px); }
+  .v-badge-info  { background: rgba(0,122,255,.12);  color: #0066d6; border: 1px solid rgba(0,122,255,.18); backdrop-filter: blur(8px); }
+  .v-content { flex: 1; min-width: 0; }
+  .v-label { font-size: .8rem; font-weight: 600; color: var(--text); }
+  .v-detail { font-size: .73rem; color: var(--text-sub); margin-top: .15rem; line-height: 1.4; }
+
+  /* ── 반응형: 모바일에서 파일 그리드 2x2 폴백 ──── */
+  @media (max-width: 600px) {
+    .file-grid { grid-template-columns: 1fr 1fr; }
+    .container { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <img src="/static/pwc_logo.png" alt="PwC">
+    <div>
+      <h1>xLoS / 동일LoS 분석 도구</h1>
+      <p>Raw 파일을 업로드하면 분석 파일을 자동으로 생성합니다</p>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Step 1 -->
+  <div class="card glass">
+    <div class="card-title"><span class="step-badge">1</span> 보고 기준월 선택</div>
+    <div class="month-row">
+      <select class="sel" id="sel-year"></select>
+      <span>년</span>
+      <select class="sel" id="sel-month"></select>
+      <span>월말</span>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="card glass">
+    <div class="card-title"><span class="step-badge">2</span> Raw 파일 업로드 <span style="font-weight:400;color:var(--text-sub);font-size:.78rem">(.xlsx)</span></div>
+    <div class="file-grid">
+
+      <div class="file-slot" id="slot-xlos_prev">
+        <label for="f-xlos_prev">
+          <div class="slot-icon" data-empty="+" data-done="&#10003;">+</div>
+          <div class="slot-label">전기 xLoS</div>
+          <div class="slot-hint">파일 선택</div>
+          <div class="slot-name"></div>
+          <input type="file" id="f-xlos_prev" accept=".xlsx,.xls">
+        </label>
+      </div>
+
+      <div class="file-slot" id="slot-xlos_curr">
+        <label for="f-xlos_curr">
+          <div class="slot-icon" data-empty="+" data-done="&#10003;">+</div>
+          <div class="slot-label">당기 xLoS</div>
+          <div class="slot-hint">파일 선택</div>
+          <div class="slot-name"></div>
+          <input type="file" id="f-xlos_curr" accept=".xlsx,.xls">
+        </label>
+      </div>
+
+      <div class="file-slot" id="slot-same_prev">
+        <label for="f-same_prev">
+          <div class="slot-icon" data-empty="+" data-done="&#10003;">+</div>
+          <div class="slot-label">전기 동일LoS</div>
+          <div class="slot-hint">파일 선택</div>
+          <div class="slot-name"></div>
+          <input type="file" id="f-same_prev" accept=".xlsx,.xls">
+        </label>
+      </div>
+
+      <div class="file-slot" id="slot-same_curr">
+        <label for="f-same_curr">
+          <div class="slot-icon" data-empty="+" data-done="&#10003;">+</div>
+          <div class="slot-label">당기 동일LoS</div>
+          <div class="slot-hint">파일 선택</div>
+          <div class="slot-name"></div>
+          <input type="file" id="f-same_curr" accept=".xlsx,.xls">
+        </label>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="card glass">
+    <div class="card-title"><span class="step-badge">3</span> 실행</div>
+    <button class="btn-run" id="btn-run" onclick="run()">분석 파일 생성</button>
+    <div class="spinner" id="spinner">
+      <span class="spinner-dot"></span>
+      <span class="spinner-dot"></span>
+      <span class="spinner-dot"></span>
+      <span>처리 중입니다</span>
+    </div>
+  </div>
+
+  <div id="result"></div>
+
+  <!-- 템플릿 관리 (접힘식) -->
+  <div class="tmpl-section glass">
+    <div class="tmpl-header" onclick="toggleTmpl()">
+      <span>템플릿 관리</span>
+      <span class="tmpl-status" id="tmpl-status">{{ '내장 템플릿 사용 중' if has_template else '템플릿 없음' }}</span>
+    </div>
+    <div class="tmpl-body" id="tmpl-body">
+      <p>
+        분석 파일의 수식·서식이 들어있는 템플릿이 앱에 내장되어 있습니다.<br>
+        구조가 변경되었을 때만 아래에서 새 템플릿으로 교체하세요.
+      </p>
+      <div class="tmpl-row">
+        <input type="file" id="f-tmpl-update" accept=".xlsx,.xls">
+        <button class="btn-tmpl" onclick="updateTmpl()">교체</button>
+      </div>
+      <div id="tmpl-msg" style="margin-top:.5rem;font-size:.78rem;"></div>
+    </div>
+  </div>
+
+</div>
+
+<footer>xLoS Collaboration Tool</footer>
+
+<script>
+(function() {
+  const now = new Date();
+  const selY = document.getElementById('sel-year');
+  const selM = document.getElementById('sel-month');
+  for (let y = now.getFullYear() + 1; y >= 2020; y--) {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    if (y === now.getFullYear()) o.selected = true;
+    selY.appendChild(o);
+  }
+  for (let m = 1; m <= 12; m++) {
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    if (m === now.getMonth() + 1) o.selected = true;
+    selM.appendChild(o);
+  }
+})();
+
+document.querySelectorAll('.file-slot input[type="file"]').forEach(inp => {
+  inp.addEventListener('change', () => {
+    const slot = inp.closest('.file-slot');
+    const nameEl = slot.querySelector('.slot-name');
+    const iconEl = slot.querySelector('.slot-icon');
+    if (inp.files.length) {
+      nameEl.textContent = inp.files[0].name;
+      slot.classList.add('has-file');
+      iconEl.textContent = iconEl.dataset.done;
+    } else {
+      nameEl.textContent = '';
+      slot.classList.remove('has-file');
+      iconEl.textContent = iconEl.dataset.empty;
+    }
+  });
+});
+
+function run() {
+  const year = parseInt(document.getElementById('sel-year').value);
+  const month = parseInt(document.getElementById('sel-month').value);
+  const reportMonth = year * 100 + month;
+
+  const keys = ['xlos_prev','xlos_curr','same_prev','same_curr'];
+  const fd = new FormData();
+  fd.append('report_month', reportMonth);
+
+  for (const k of keys) {
+    const inp = document.getElementById('f-' + k);
+    if (!inp.files.length) { alert('Raw 파일 4개를 모두 업로드해 주세요.'); return; }
+    fd.append(k, inp.files[0]);
+  }
+
+  const btn = document.getElementById('btn-run');
+  const spinner = document.getElementById('spinner');
+  const result = document.getElementById('result');
+
+  btn.disabled = true;
+  spinner.classList.add('show');
+  result.className = '';
+  result.innerHTML = '';
+
+  fetch('/process', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      spinner.classList.remove('show');
+      btn.disabled = false;
+      result.classList.add('show');
+      if (data.ok) {
+        let html = renderSummaryTable(data.xlos_summary, 'LoS별 집계 (xLoS)', 'xlos');
+        html += renderSummaryTable(data.same_summary, 'LoS별 집계 (동일 LoS)', 'same');
+        html += renderValidation(data.validation || []);
+        html += '<div class="download-bar glass">'
+          + '<p>분석 파일이 생성되었습니다!</p>'
+          + '<a class="btn-download" href="/download/' + encodeURIComponent(data.download_id) + '">엑셀 파일 다운로드</a>'
+          + '</div>';
+        result.innerHTML = html;
+      } else {
+        result.innerHTML = '<div class="result-error">' + data.error + '</div>';
+      }
+    })
+    .catch(err => {
+      spinner.classList.remove('show');
+      btn.disabled = false;
+      result.classList.add('show');
+      result.innerHTML = '<div class="result-error">서버 연결 오류: ' + err.message + '</div>';
+    });
+}
+
+function fmtN(n) {
+  if (n === 0 || n === undefined || n === null) return '-';
+  return n.toLocaleString('ko-KR');
+}
+
+function renderSummaryTable(summary, title, type) {
+  if (!summary || !summary.data || summary.data.length === 0) return '';
+  const labels = summary.labels;
+  const data = summary.data;
+  const isXlos = summary.is_xlos;
+  const cls = type === 'xlos' ? 'tag-xlos' : 'tag-same';
+  const phCls = type === 'xlos' ? 'period-header' : 'period-header period-header-same';
+
+  let h = '<div class="summary-card glass">';
+  h += '<div class="summary-title"><span class="tag ' + cls + '">' + (type === 'xlos' ? 'xLoS' : '동일LoS') + '</span>' + title + '</div>';
+  h += '<div class="summary-scroll"><table class="summary-table">';
+
+  const colsPer = isXlos ? 3 : 2;
+  h += '<thead><tr><th rowspan="2" style="text-align:left">LoS</th>';
+  for (const lb of labels) {
+    h += '<th colspan="' + colsPer + '" class="' + phCls + '">' + lb + '</th>';
+  }
+  h += '</tr><tr>';
+  for (let i = 0; i < labels.length; i++) {
+    h += '<th>건수</th><th>금액</th>';
+    if (isXlos) h += '<th>Refer EM</th>';
+  }
+  h += '</tr></thead><tbody>';
+
+  for (const row of data) {
+    const isT = row.los === 'Total';
+    h += '<tr' + (isT ? ' class="total-row"' : '') + '>';
+    h += '<td class="los-cell">' + row.los + '</td>';
+    for (let i = 0; i < labels.length; i++) {
+      const cv = row['c' + i] || 0;
+      const av = row['a' + i] || 0;
+      h += '<td class="num-cell' + (cv === 0 ? ' zero' : '') + '">' + fmtN(cv) + '</td>';
+      h += '<td class="num-cell' + (av === 0 ? ' zero' : '') + '">' + fmtN(av) + '</td>';
+      if (isXlos) {
+        const rv = row['r' + i] || 0;
+        h += '<td class="num-cell' + (rv === 0 ? ' zero' : '') + '">' + fmtN(rv) + '</td>';
+      }
+    }
+    h += '</tr>';
+  }
+  h += '</tbody></table></div></div>';
+  return h;
+}
+
+function renderValidation(checks) {
+  if (!checks || checks.length === 0) return '';
+  const badgeMap = {
+    pass:    { cls: 'v-badge-pass', text: 'PASS' },
+    fail:    { cls: 'v-badge-fail', text: 'FAIL' },
+    warning: { cls: 'v-badge-warn', text: 'WARNING' },
+    info:    { cls: 'v-badge-info', text: 'INFO' },
+  };
+  let h = '<div class="validation-card glass">';
+  h += '<div class="validation-title"><span class="step-badge" style="background:linear-gradient(135deg,#66bb6a,#81c784)">&#10003;</span> 검증 결과</div>';
+  h += '<ul class="validation-list">';
+  for (const c of checks) {
+    const b = badgeMap[c.status] || badgeMap.info;
+    h += '<li class="validation-item">';
+    h += '<span class="v-badge ' + b.cls + '">' + b.text + '</span>';
+    h += '<div class="v-content">';
+    h += '<div class="v-label">' + c.label + '</div>';
+    h += '<div class="v-detail">' + c.detail + '</div>';
+    h += '</div></li>';
+  }
+  h += '</ul></div>';
+  return h;
+}
+
+function toggleTmpl() {
+  document.getElementById('tmpl-body').classList.toggle('open');
+}
+
+function updateTmpl() {
+  const inp = document.getElementById('f-tmpl-update');
+  if (!inp.files.length) { alert('파일을 선택해 주세요.'); return; }
+  const fd = new FormData();
+  fd.append('template', inp.files[0]);
+  const msg = document.getElementById('tmpl-msg');
+  msg.textContent = '업로드 중...';
+  msg.style.color = 'var(--text-sub)';
+  fetch('/update-template', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        msg.textContent = '템플릿이 교체되었습니다!';
+        msg.style.color = 'var(--success)';
+        document.getElementById('tmpl-status').textContent = '내장 템플릿 사용 중';
+      } else {
+        msg.textContent = data.error;
+        msg.style.color = 'var(--error)';
+      }
+    });
+}
+</script>
+</body>
+</html>

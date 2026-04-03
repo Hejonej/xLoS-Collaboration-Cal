@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+uploads/
+output/
+*.xlsx
+!static/default_template.xlsx
+.env
+check_*.py
+excel_processor.py
