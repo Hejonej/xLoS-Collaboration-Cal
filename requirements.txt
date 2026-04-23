@@ -3,3 +3,4 @@ pandas
 openpyxl
 werkzeug
 waitress
+gunicorn
