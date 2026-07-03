@@ -435,21 +435,22 @@ def _write_to_template(
     write_sheet(SHEET_XLOS, df_xlos, clear_all=True)
     write_sheet(SHEET_SAME, df_same, clear_all=True)
 
-    # LoS별 탭 집계 기준 텍스트 갱신
-    _CRITERIA_XLOS = [
-        ('B5', '- 건수: 승인 기준 "Y" 선택 & 관리반영 기준 전체 선택 & 생성 구분 "노츠생성" 선택'),
-        ('B6', '- 금액: 승인 기준 "Y" 선택 & 관리 반영 기준 전체 선택 & 생성 구분 전체 선택'),
-        ('B7', '- Refer EM: 승인기준 전체 선택 & 관리반영 기준 "Y" 선택 & 생성 구분 전체 선택'),
-    ]
-    _CRITERIA_SAME = [
-        ('B5', '- 건수: 승인 기준 "Y" 선택 & 관리반영 기준 전체 선택 & 생성 구분 "노츠생성" 선택'),
-        ('B6', '- 금액: 승인 기준 "Y" 선택 & 관리 반영 기준 전체 선택 & 생성 구분 전체 선택'),
-    ]
-    for sname, criteria in [("LoS별 (xLoS)", _CRITERIA_XLOS), ("LoS별 (동일 LoS)", _CRITERIA_SAME)]:
+    # 집계 기준 텍스트 갱신 (4개 탭)
+    _TXT_CNT = '- 건수: 승인 기준 "Y" 선택 & 관리반영 기준 전체 선택 & 생성 구분 "노츠생성" 선택'
+    _TXT_AMT = '- 금액: 승인 기준 "Y" 선택 & 관리 반영 기준 전체 선택 & 생성 구분 전체 선택'
+    _TXT_REF = '- Refer EM: 승인기준 전체 선택 & 관리반영 기준 "Y" 선택 & 생성 구분 전체 선택'
+
+    _CRITERIA_MAP = {
+        "LoS별 (xLoS)":          [('A4', '집계 기준:'), ('B5', _TXT_CNT), ('B6', _TXT_AMT), ('B7', _TXT_REF)],
+        "Project List (xLoS)":   [('B4', _TXT_CNT), ('B5', _TXT_AMT), ('B6', _TXT_REF)],
+        "LoS별 (동일 LoS)":      [('A4', '집계 기준:'), ('B5', _TXT_CNT), ('B6', _TXT_AMT)],
+        "Project List (동일 LoS)": [('B5', _TXT_CNT), ('B6', _TXT_AMT)],
+    }
+    for sname, criteria in _CRITERIA_MAP.items():
         if sname in wb.sheetnames:
-            ws_los = wb[sname]
+            ws_c = wb[sname]
             for cell_ref, text in criteria:
-                ws_los[cell_ref] = text
+                ws_c[cell_ref] = text
 
     # B9, C9 윗선 복원 (Project List xLoS 탭)
     ws_xlos = wb[SHEET_XLOS]
