@@ -116,6 +116,57 @@ def _ensure_column(df: pd.DataFrame, standard: str, candidates: list[str]) -> No
 
 _VALID_CREATION_TYPES = {"노츠생성", "자동생성(F-link)", "수기생성(F-link)"}
 
+_OFFSET_MONEY_COLS = ["예상(표준) EM", "Refer EM", "Matching EM", "Refer EM Total"]
+
+
+def _remove_offset_pairs(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Rating이 '-'로 시작하는 행과 같은 Project Code에서 금액이 반대인 상계 쌍을 삭제한다."""
+    _ensure_column(df, "Rating", ["Rating"])
+    if "Rating" not in df.columns or "Project Code" not in df.columns:
+        return df, 0
+
+    money_cols = [c for c in _OFFSET_MONEY_COLS if c in df.columns]
+    if not money_cols:
+        return df, 0
+
+    neg_mask = df["Rating"].astype(str).str.match(r"^-")
+    if not neg_mask.any():
+        return df, 0
+
+    remove_indices = set()
+
+    for neg_idx in df[neg_mask].index:
+        if neg_idx in remove_indices:
+            continue
+        neg_row = df.loc[neg_idx]
+        pc = neg_row["Project Code"]
+
+        candidates = df[
+            (df["Project Code"] == pc)
+            & (~df.index.isin(remove_indices))
+            & (df.index != neg_idx)
+            & (~df["Rating"].astype(str).str.match(r"^-"))
+        ]
+
+        for cand_idx in candidates.index:
+            cand_row = df.loc[cand_idx]
+            is_pair = True
+            for col in money_cols:
+                neg_val = pd.to_numeric(neg_row[col], errors="coerce") or 0
+                cand_val = pd.to_numeric(cand_row[col], errors="coerce") or 0
+                if abs(neg_val + cand_val) > 0.01:
+                    is_pair = False
+                    break
+            if is_pair:
+                remove_indices.add(neg_idx)
+                remove_indices.add(cand_idx)
+                break
+
+    removed = len(remove_indices)
+    if removed:
+        df = df.drop(index=list(remove_indices)).reset_index(drop=True)
+    return df, removed
+
 
 def _merge_and_dedup(prev_df: pd.DataFrame, curr_df: pd.DataFrame) -> pd.DataFrame:
     df = pd.concat([prev_df, curr_df], ignore_index=True)
@@ -437,6 +488,8 @@ def validate_results(
     pl_xlos: pd.DataFrame,
     pl_same: pd.DataFrame,
     cfg: PeriodConfig,
+    x_offset_removed: int = 0,
+    s_offset_removed: int = 0,
 ) -> list[dict]:
     """처리 결과의 정합성을 자동 검증하고 항목별 결과 리스트를 반환한다."""
     checks: list[dict] = []
@@ -465,6 +518,16 @@ def validate_results(
                 f" → 중복 {n_dup}건 제거 → {n_merged}건"
             ),
         })
+
+    # ── 1b. 상계 쌍 제거 현황 ─────────────────────────────────
+    for label, removed in [("xLoS", x_offset_removed), ("동일LoS", s_offset_removed)]:
+        if removed > 0:
+            checks.append({
+                "id": f"offset_removed_{label}",
+                "label": f"상계 쌍 제거 ({label})",
+                "status": "info",
+                "detail": f"Rating 음수 상계 {removed}행 제거됨 ({removed // 2}쌍)",
+            })
 
     # ── 2. 승인 기준 Y/N 역검증 ────────────────────────────────
     for label, df, is_xlos in [
@@ -612,6 +675,9 @@ def process_files(
     x_merged = _merge_and_dedup(x_prev, x_curr)
     s_merged = _merge_and_dedup(s_prev, s_curr)
 
+    x_merged, x_offset_removed = _remove_offset_pairs(x_merged)
+    s_merged, s_offset_removed = _remove_offset_pairs(s_merged)
+
     pl_xlos = _build_project_list(x_merged, is_xlos=True, cfg=cfg)
     pl_same = _build_project_list(s_merged, is_xlos=False, cfg=cfg)
 
@@ -623,6 +689,8 @@ def process_files(
         x_merged=x_merged, s_merged=s_merged,
         pl_xlos=pl_xlos, pl_same=pl_same,
         cfg=cfg,
+        x_offset_removed=x_offset_removed,
+        s_offset_removed=s_offset_removed,
     )
 
     return {
