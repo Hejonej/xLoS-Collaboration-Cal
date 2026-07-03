@@ -8,7 +8,9 @@ import shutil
 import zipfile
 
 import pandas as pd
+from copy import copy
 from openpyxl import load_workbook
+from openpyxl.styles import Border, Side
 
 
 import re as _re
@@ -415,8 +417,36 @@ def _write_to_template(
                 ws.cell(row=current_row, column=c_idx).value = row[df_col]
             current_row += 1
 
+        last_data_row = current_row - 1
+
+        # 11행(start_row) 서식을 데이터 끝행까지 복사
+        if last_data_row > start_row:
+            for c in range(1, ws.max_column + 1):
+                src_cell = ws.cell(row=start_row, column=c)
+                for r in range(start_row + 1, last_data_row + 1):
+                    dest_cell = ws.cell(row=r, column=c)
+                    if src_cell.has_style:
+                        dest_cell.font = copy(src_cell.font)
+                        dest_cell.border = copy(src_cell.border)
+                        dest_cell.fill = copy(src_cell.fill)
+                        dest_cell.number_format = src_cell.number_format
+                        dest_cell.alignment = copy(src_cell.alignment)
+
     write_sheet(SHEET_XLOS, df_xlos, clear_all=True)
     write_sheet(SHEET_SAME, df_same, clear_all=True)
+
+    # B9, C9 윗선 복원 (Project List xLoS 탭)
+    ws_xlos = wb[SHEET_XLOS]
+    thin_top = Border(top=Side(style="thin"))
+    for col in [2, 3]:  # B, C
+        cell = ws_xlos.cell(row=9, column=col)
+        existing = cell.border
+        cell.border = Border(
+            top=Side(style="thin"),
+            left=existing.left,
+            right=existing.right,
+            bottom=existing.bottom,
+        )
 
     wb.save(output_path)
 
