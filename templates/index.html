@@ -762,7 +762,18 @@ function renderSummaryTable(summary, title, type) {
     }
     h += '</tr>';
   }
-  h += '</tbody></table></div></div>';
+  h += '</tbody></table></div>';
+
+  h += '<div style="margin-top:.8rem;font-size:.7rem;color:var(--text-sub);line-height:1.7">';
+  h += '<b style="color:var(--text);font-size:.72rem">집계 기준:</b><br>';
+  h += '- 건수: 승인 기준 "Y" 선택 &amp; 관리반영 기준 전체 선택 &amp; 생성 구분 "노츠생성" 선택<br>';
+  h += '- 금액: 승인 기준 "Y" 선택 &amp; 관리 반영 기준 전체 선택 &amp; 생성 구분 전체 선택';
+  if (isXlos) {
+    h += '<br>- Refer EM: 승인기준 전체 선택 &amp; 관리반영 기준 "Y" 선택 &amp; 생성 구분 전체 선택';
+  }
+  h += '</div>';
+
+  h += '</div>';
   return h;
 }
 
